@@ -21,6 +21,8 @@
 		LOGICAL_EXP = 'LogicalExpression',
 		CONDITIONAL_EXP = 'ConditionalExpression',
 		ARRAY_EXP = 'ArrayExpression',
+		OBJECT_EXP = 'ObjectExpression',
+		PROPERTY = 'Property',
 
 		PERIOD_CODE = 46, // '.'
 		COMMA_CODE  = 44, // ','
@@ -33,6 +35,8 @@
 		QUMARK_CODE = 63, // ?
 		SEMCOL_CODE = 59, // ;
 		COLON_CODE  = 58, // :
+		OCURL_CODE  = 123,// {
+		BCURL_CODE  = 125,// }
 
 		throwError = function(message, index) {
 			var error = new Error(message + ' at character ' + index);
@@ -114,6 +118,9 @@
 					(ch >= 48 && ch <= 57) || // 0...9
                     (ch >= 128 && !binary_ops[String.fromCharCode(ch)]); // any non-ASCII that is not an operator
 		},
+		isSpacePart = function(ch) {
+			return ch === 32 || ch === 9 || ch === 13 || ch === 10;
+		},
 
 		// Parsing
 		// -------
@@ -131,8 +138,8 @@
 				// Push `index` up to the next non-space character
 				gobbleSpaces = function() {
 					var ch = exprICode(index);
-					// space or tab
-					while(ch === 32 || ch === 9 || ch === 10 || ch === 13) {
+					// space, tab, newline
+					while(ch === 32 || ch === 9 || ch === 13 || ch === 10) {
 						ch = exprICode(++index);
 					}
 				},
@@ -269,6 +276,8 @@
 						return gobbleStringLiteral();
 					} else if (ch === OBRACK_CODE) {
 						return gobbleArray();
+					} else if (ch === OCURL_CODE) {
+						return gobbleObject();
 					} else {
 						to_check = expr.substr(index, max_unop_len);
 						tc_len = to_check.length;
@@ -347,7 +356,7 @@
 					};
 				},
 
-				// Parses a string literal, staring with single or double quotes with basic support for escape codes
+				// Parses a string literal, starting with single or double quotes with basic support for escape codes
 				// e.g. `"hello world"`, `'this is\nJSEP'`
 				gobbleStringLiteral = function() {
 					var str = '', quote = exprI(index++), closed = false, ch;
@@ -547,6 +556,65 @@
 						type: ARRAY_EXP,
 						elements: gobbleArguments(CBRACK_CODE)
 					};
+                },
+
+                gobbleProperty = function () {
+                    var key = gobbleToken();
+                    gobbleSpaces();
+                    var ch_i = exprICode(index);
+                    while (ch_i !== COLON_CODE && index < length) {
+                        index++;
+                        ch_i = exprICode(index);
+                    }
+                    index++;
+                    var value = gobbleToken();
+                    return {
+                        type: PROPERTY,
+                        key: key,
+                        value: value
+                    };
+                },
+
+                gobblePropeties = function (termination) {
+                    var ch_i, args = [], node, closed = false;
+                    var separator_count = 0;
+                    while (index < length) {
+                        gobbleSpaces();
+                        ch_i = exprICode(index);
+                        if (ch_i === termination) { // done parsing
+                            closed = true;
+                            index++;
+                            break;
+                        } else if (ch_i === COMMA_CODE) { // between expressions
+                            index++;
+                            separator_count++;
+                            if (separator_count !== args.length) { // missing argument
+                                if (termination === BCURL_CODE) {
+                                    for (var arg = args.length; arg < separator_count; arg++) {
+                                        args.push(null);
+                                    }
+                                }
+                            }
+                        } else {
+                            node = gobbleProperty();
+                            if (!node || node.type === COMPOUND) {
+                                throwError('Expected comma', index);
+                            }
+                            args.push(node);
+                        }
+                    }
+                    if (!closed) {
+                        throwError('Expected ' + String.fromCharCode(termination), index);
+                    }
+                    return args;
+                },
+
+                gobbleObject = function () {
+                    index++;
+                    return {
+                        type: OBJECT_EXP,
+                        properties: gobblePropeties(BCURL_CODE)
+                    };
 				},
 
 				nodes = [], ch_i, node;

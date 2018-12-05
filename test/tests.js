@@ -92,8 +92,58 @@ QUnit.test('Ops', function(assert) {
 	test_op_expession("(1+2)*3", assert);
 	test_op_expession("(1+2)*3+4-2-5+2/2*3", assert);
 	test_op_expession("1 + 2-   3*	4 /8", assert);
-	test_op_expession("\n1\r\n+\n2\n", assert);
+    test_op_expession("\n1\r\n+\n2\n", assert);
 });
+
+QUnit.test('Objects', function(assert) {
+    test_parser("{}", { type: "ObjectExpression", properties: [] }, assert);
+
+	test_parser('{ "foo": 3 }', {
+		type: "ObjectExpression",
+		properties: [
+			{
+				type: "Property",
+				key: {
+					type: "Literal",
+					value: "foo",
+					raw: "\"foo\""
+				},
+				value: {
+					type: "Literal",
+					value: 3
+				}
+			}
+		]
+    }, assert);
+
+    test_parser('[{ "foo": {}}, {}]', {
+        type: "ArrayExpression",
+        elements: [
+            {
+                type: "ObjectExpression",
+                properties: [
+                    {
+                        type: "Property",
+                        key: {
+                            type: "Literal",
+                            value: "foo",
+                            raw: "\"foo\""
+                        },
+                        value: {
+                            type: "ObjectExpression",
+                            properties: []
+                        }
+                    }
+                ]
+            },
+            {
+                type: "ObjectExpression",
+                properties: []
+            }
+        ]
+    }, assert);
+});
+
 
 QUnit.test('Custom operators', function(assert) {
 	jsep.addBinaryOp("^", 10);
